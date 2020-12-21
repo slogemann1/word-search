@@ -65,7 +65,7 @@ fn parse_tags(word_list: Vec<WordResult>) -> Result<Vec<Word>, SearchError> {
     Ok(word_list_parsed)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchType {
     RelatedTo,
     RhymesWith,

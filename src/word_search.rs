@@ -1,10 +1,16 @@
 use std::sync::Mutex;
+use std::thread;
+use std::iter::FromIterator;
 use rand::prelude::*;
 
 static MAX_ITER: u32 = 1000;
 
 lazy_static! {
     static ref ITERATIONS: Mutex<u32> = {
+        Mutex::new(0)
+    };
+
+    pub static ref COUNT: Mutex<u32> = { //For getting progress
         Mutex::new(0)
     };
 }
@@ -25,10 +31,17 @@ pub fn generate(word_list: &Vec<String>, max_count: usize, height: usize, width:
             break;
         }
 
-        match add_word(&field, &word.to_uppercase(), &mut random) {
+        let word_original = word.clone();
+        let mut word = word.to_uppercase().replace(" ", "");
+        if random.gen::<f32>() < 0.25 {
+            word = String::from_iter(word.chars().rev());
+        }
+
+        match add_word(&field, &word, &mut random) {
             Some(val) => {
+                set_count(get_count() + 1);
                 field = val;
-                search_list.push(word.to_uppercase());
+                search_list.push(word_original.to_uppercase());
             },
             None => ()
         }
@@ -42,12 +55,24 @@ pub fn generate(word_list: &Vec<String>, max_count: usize, height: usize, width:
         }
     }
 
+    set_iter(0);
+
     Some(
         WordSearch {
             field: field,
             word_list: search_list
         }
     )
+}
+
+pub fn get_count() -> u32 {
+    match COUNT.lock() {
+        Ok(val) => *val,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            get_count()
+        }
+    }
 }
 
 fn check_stop() -> bool {
@@ -62,10 +87,33 @@ fn check_stop() -> bool {
     }
 }
 
-fn increment_iter() {
+fn set_iter(iter: u32) {
     match ITERATIONS.lock() {
-        Ok(mut val) => *val += 1,
-        Err(_) => return
+        Ok(mut val) => *val = iter,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            set_iter(iter);
+        }
+    }
+}
+
+fn get_iter() -> u32 {
+    match ITERATIONS.lock() {
+        Ok(val) => *val,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            get_iter()
+        }
+    }
+}
+
+pub fn set_count(count: u32) {
+    match COUNT.lock() {
+        Ok(mut val) => *val = count,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            set_count(count)
+        }
     }
 }
 
@@ -80,7 +128,7 @@ fn add_word(field: &Vec<Vec<char>>, word: &str, random: &mut ThreadRng) -> Optio
     let start_w = (random.gen::<f32>() * (field.len() as f32)) as usize;
     let start_h = (random.gen::<f32>() * (field[0].len() as f32)) as usize;
 
-    increment_iter();
+    set_iter(get_iter() + 1);
 
     for orientation in or_set {
         for x in start_w..field.len() {

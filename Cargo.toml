@@ -12,3 +12,5 @@ lazy_static = "1.4.0"
 reqwest = { version = "0.10.10", features = ["blocking", "json"] }
 serde = { version = "1.0.118", features = ["derive"] }
 pdf-canvas = "0.6.0"
+iced = { version = "0.2.0", features = ["tokio"] }
+chrono = "0.4"

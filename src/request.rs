@@ -1,7 +1,22 @@
+use std::sync::Mutex;
+use std::thread;
+
 use crate::word_list::{ self, SearchType, SearchError };
 use crate::word_search::{ self, WordSearch };
 
+lazy_static! {
+    pub static ref TOTAL: Mutex<i32> = {
+        Mutex::new(0)
+    };
+
+    pub static ref FINISHED: Mutex<bool> = {
+        Mutex::new(false)
+    };
+}
+
 pub fn handle_requests(requests: Vec<WordSearchRequest>) -> (Vec<TitledWordSearch>, Vec<String>) {
+    set_finished(false);
+    calc_total(&requests);
     let mut error_msgs: Vec<String> = Vec::new();
     let mut word_search_list: Vec<TitledWordSearch> = Vec::new();
     for request in requests {
@@ -27,7 +42,25 @@ pub fn handle_requests(requests: Vec<WordSearchRequest>) -> (Vec<TitledWordSearc
         });
     }
 
+    word_search::set_count(0);
+    set_total(1);
+    set_finished(true);
+
     (word_search_list, error_msgs)
+}
+
+pub fn get_progress() -> f32 {
+    (word_search::get_count() as f32) / (get_total() as f32)
+}
+
+pub fn get_finished() -> bool {
+    match FINISHED.lock() {
+        Ok(val) => *val,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            get_finished()
+        }
+    }
 }
 
 fn get_word_search(start_word: &str, search_type: SearchType, max_count: usize, width: usize, height: usize) -> Result<WordSearch, SearchError> {
@@ -64,6 +97,45 @@ fn get_word_search(start_word: &str, search_type: SearchType, max_count: usize, 
     }
 
     Ok(final_result)
+}
+
+fn calc_total(requests: &Vec<WordSearchRequest>) {
+    let mut tot_words = 0;
+    for request in requests {
+        tot_words += request.max_count;
+    }
+
+    set_total(tot_words as i32);
+}
+
+fn set_total(total: i32) {
+    match TOTAL.lock() {
+        Ok(mut val) => *val = total,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            set_total(total);
+        }
+    }
+}
+
+fn get_total() -> i32 {
+    match TOTAL.lock() {
+        Ok(val) => *val,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            get_total()
+        }
+    }
+}
+
+fn set_finished(finished: bool) {
+    match FINISHED.lock() {
+        Ok(mut val) => *val = finished,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            set_finished(finished);
+        }
+    }
 }
 
 pub struct WordSearchRequest {
