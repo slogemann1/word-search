@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::sync::Mutex;
 use std::thread;
 use iced::{ 
-    Application, Column, Text, Settings, Element, Container, Length, Rule, Row, Align, Space, ProgressBar, Command, Subscription
+    Application, Column, Text, Settings, Element, Container, Length, Rule, Row,
+    Align, Space, ProgressBar, Command, Subscription, HorizontalAlignment
 };
 use iced::widget::{
     slider::{ self, Slider }, 
@@ -18,6 +19,9 @@ use iced;
 use crate::word_list::SearchType;
 use crate::request::{ self, WordSearchRequest };
 use crate::pdf;
+
+mod styling;
+use styling::MyStyle;
 
 const TITLE_SIZE: u16 = 40;
 const TITLE_2_SIZE: u16 = 30;
@@ -42,6 +46,10 @@ lazy_static! {
     static ref GEN_STATUS: Mutex<GenStatus> = {
         Mutex::new(GenStatus::InProgress)
     };
+
+    static ref ERR_MSGS: Mutex<Vec<String>> = {
+        Mutex::new(Vec::new())
+    };
 }
 
 pub fn run() -> iced::Result {
@@ -54,7 +62,8 @@ pub fn run() -> iced::Result {
 
 enum ProgressState {
     Creating,
-    Generating
+    Generating,
+    Finished,
 }
 
 struct Gui {
@@ -72,7 +81,11 @@ struct Gui {
     word_search_list_scroll: scrollable::State,
     word_search_list: Vec<WordSearchField>,
     //Generation State
-    progress_state: ProgressState
+    progress_state: ProgressState,
+    finished_button: button::State,
+    //Errors Before Generation
+    err_msg: String,
+    err: bool,
 }
 
 #[derive(Clone)]
@@ -102,6 +115,7 @@ enum Message {
     SettingsWordNum(u8),
     SettingsPageFormat(String),
     SettingsSaveDir(String),
+    Reset,
     Refresh
 }
 
@@ -119,7 +133,7 @@ impl Application for Gui {
             page_format_pl: pick_list::State::default(),
             page_format: &ALL_FORMATS[0],
             save_dir_in: text_input::State::new(),
-            save_dir: String::from("TODO"),
+            save_dir: String::from(""),
 
             gen_button: button::State::new(),
             word_search_list: vec![
@@ -135,7 +149,11 @@ impl Application for Gui {
             ],
             word_search_list_scroll: scrollable::State::new(),
 
-            progress_state: ProgressState::Creating
+            progress_state: ProgressState::Creating,
+            finished_button: button::State::new(),
+
+            err_msg: String::from(""),
+            err: false
         };
 
         (gui, Command::none())
@@ -165,12 +183,19 @@ impl Application for Gui {
             Message::StartGenerate => {
                 for i in 0..(self.word_search_list.len() - 1) {
                     if self.word_search_list[i].base_word == String::from("") {
-                        println!("Error: The Base Word for Word Search {} is Missing", i + 1);
+                        self.err_msg = format!("Error: The Base Word for Word Search {} is Missing", i + 1);
+                        self.err = true;
                         return Command::none();
                     }
                 }
                 if self.word_search_list.len() == 1 {
-                    println!("Error: No Word Searches Have Been Created");
+                    self.err_msg = format!("Error: No Word Searches Have Been Created");
+                    self.err = true;
+                    return Command::none();
+                }
+                if self.save_dir == "" {
+                    self.err_msg = format!("Error: No Saving Directory Has Been Specified");
+                    self.err = true;
                     return Command::none();
                 }
 
@@ -179,6 +204,7 @@ impl Application for Gui {
                 //Spawn generation thread
                 let word_search_list = self.word_search_list.clone();
                 let format = self.page_format.clone();
+                let save_dir = self.save_dir.clone();
                 let max_count = self.word_count as usize;
                 let height = self.letter_count as usize;
                 let width = self.letter_count as usize;
@@ -199,11 +225,12 @@ impl Application for Gui {
                     }
 
                     let (results, errors) = request::handle_requests(requests);
-                    
+                    set_err_msgs(errors);
+
                     let (width, height) = get_format(&format);
-                    match pdf::create_pdf(results, width, height) {
+                    match pdf::create_pdf(results, width, height, &save_dir) {
                         Ok(val) => val,
-                        Err(err) => println!("An error ocurred while generating the pdf\nError Message: {}", err)
+                        Err(_) => ()
                     };
 
                     set_gen_status(GenStatus::Done);
@@ -240,10 +267,14 @@ impl Application for Gui {
                 match get_gen_status() {
                     GenStatus::InProgress => (),
                     GenStatus::Done => {
-                        self.reset();
-                        self.progress_state = ProgressState::Creating;
+                        set_gen_status(GenStatus::InProgress);
+                        self.progress_state = ProgressState::Finished;
                     }
                 }
+            },
+            Message::Reset => {
+                self.progress_state = ProgressState::Creating;
+                self.reset();
             }
         }
 
@@ -258,7 +289,8 @@ impl Application for Gui {
     fn view(&mut self) -> Element<Message> {
         match self.progress_state {
             ProgressState::Creating => self.draw_creating(),
-            ProgressState::Generating => self.draw_generating()
+            ProgressState::Generating => self.draw_generating(),
+            ProgressState::Finished => self.draw_finished()
         }
     }
 }
@@ -288,7 +320,10 @@ impl Gui {
                             Text::new("Base Word:").into(),
                             TextInput::new(&mut item.base_word_in, "Type in Base Word Here", &item.base_word, move |val| {
                                 Message::WordSearchFieldString((item_index, val))
-                            }).width(Length::Units(item_width)).into()
+                            })
+                            .width(Length::Units(item_width))
+                            .style(MyStyle)
+                            .into()
                         ]
                     ).spacing(15);
 
@@ -303,7 +338,10 @@ impl Gui {
                                 move |val| {
                                     Message::WordSearchFieldPickList((item_index, val))
                                 }
-                            ).width(Length::Shrink).into()
+                            )
+                            .width(Length::Shrink)
+                            .style(MyStyle)
+                            .into()
                         ]
                     ).spacing(15);
 
@@ -314,6 +352,7 @@ impl Gui {
                     word_search_scroll = word_search_scroll.push(
                         Button::new(&mut item.new_button, Text::new("Add a New Word Search"))
                         .on_press(Message::AddWordSearch)
+                        .style(MyStyle)
                     );
                 }
             }
@@ -354,12 +393,15 @@ impl Gui {
 
         settings_col = settings_col.push(Text::new("Page Format:")) //Page format list
         .push(Space::with_height(Length::Units(settings_mini_spacing)))
-        .push(PickList::new(
+        .push(
+            PickList::new(
             &mut self.page_format_pl,
             Cow::from(&*ALL_FORMATS),
             Some(self.page_format.to_string()),
             Message::SettingsPageFormat
-        ))
+            )
+            .style(MyStyle)
+        )
         .push(Space::with_height(Length::Units(settings_spacing)));
 
         settings_col = settings_col.push(Text::new("Save to:")) //Save Directory
@@ -370,15 +412,24 @@ impl Gui {
                 "Enter a Directory",
                 &self.save_dir,
                 Message::SettingsSaveDir
-            ).width(Length::Units(item_width))
-        ).push(Space::with_height(Length::Units(80)));
+            )
+            .width(Length::Units(item_width))
+            .style(MyStyle)
+        ).push(Space::with_height(Length::Units(60)));
 
         settings_col = settings_col.push( //Generate Button
             Button::new(
                 &mut self.gen_button,
-                Text::new("Generate Word Searches")
-            ).on_press(Message::StartGenerate)
+                Text::new("Generate Word Searches").size(35)
+            )
+            .on_press(Message::StartGenerate)
+            .style(MyStyle)
         );
+
+        if self.err {
+            settings_col = settings_col.push(Space::with_height(Length::Units(45)))
+            .push(Text::new(&self.err_msg));
+        }
 
 
         //Combine Both Elements
@@ -396,6 +447,7 @@ impl Gui {
 
         Container::new(whole_display)
         .center_x()
+        .style(MyStyle)
         .into()
     }
 
@@ -416,14 +468,56 @@ impl Gui {
             text = Text::new("Creating Pdf...").size(75);
         }
 
-        col = col.push(text)
+        col = col.push(Space::with_height(Length::Units(200)))
+        .push(text)
         .push(
             ProgressBar::new(0.0..=100.0, progress * 100.0)
-        );
+        )
+        .push(Space::with_height(Length::Units(500)));
 
         Container::new(col)
         .center_x()
         .center_y()
+        .style(MyStyle)
+        .into()
+    }
+
+    fn draw_finished(&mut self) -> Element<Message> {
+        let mut col = Column::new()
+        .height(Length::Fill)
+        .width(Length::Fill)
+        .align_items(Align::Center);
+
+        col = col.push(Space::with_height(Length::Units(200)))
+        .push(
+            Text::new("Finished Generating Word Searches!")
+            .horizontal_alignment(HorizontalAlignment::Center)
+            .size(75)
+        )
+        .push(Space::with_height(Length::Units(50)))
+        .push(
+            Button::new(&mut self.finished_button, Text::new("Click Here to Continue").size(50))
+            .on_press(Message::Reset)
+            .style(MyStyle)
+        );
+
+        let err_msgs = get_err_msgs();
+        if err_msgs.len() > 0 {
+            col = col.push(Space::with_height(Length::Units(50)))
+            .push(Text::new("Error messages:").size(30));
+
+            for msg in err_msgs {
+                col = col.push(Space::with_height(Length::Units(10)))
+                .push(Text::new(&msg).size(15));
+            }
+        }
+
+        Container::new(col)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x()
+        .center_y()
+        .style(MyStyle)
         .into()
     }
 
@@ -439,6 +533,9 @@ impl Gui {
                 index: 0
             }
         ];
+        set_err_msgs(Vec::new());
+        self.err = false;
+        self.err_msg = String::new();
     }
 }
 
@@ -481,6 +578,26 @@ fn set_gen_status(status: GenStatus) {
         Err(_) => {
             thread::sleep(std::time::Duration::from_millis(100));
             set_gen_status(status.clone())
+        }
+    }
+}
+
+fn set_err_msgs(msgs: Vec<String>) {
+    match ERR_MSGS.lock() {
+        Ok(mut val) => *val = msgs,
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            set_err_msgs(msgs);
+        }
+    }
+}
+
+fn get_err_msgs() -> Vec<String> {
+    match ERR_MSGS.lock() {
+        Ok(val) => val.clone(),
+        Err(_) => {
+            thread::sleep(std::time::Duration::from_millis(50));
+            get_err_msgs()
         }
     }
 }

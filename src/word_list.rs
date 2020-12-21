@@ -28,6 +28,15 @@ pub fn generate(start_word: &str, search_type: SearchType) -> Result<Vec<String>
     let len = word_list.len();
     word_list[0..len].shuffle(&mut rand::thread_rng());
 
+    if len < 8 {
+        return Err(
+            SearchError::MyError(
+                format!("Not enough words could be found for \"{}\", please try a different word or category",
+                start_word)
+            )
+        );
+    }
+
     Ok(word_list)
 }
 

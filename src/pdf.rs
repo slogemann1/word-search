@@ -13,9 +13,9 @@ lazy_static! {
     static ref MAX_COUNT: Mutex<u32> = Mutex::new(0); 
 }
 
-pub fn create_pdf(word_search_list: Vec<TitledWordSearch>, width: f32, height: f32) -> Result<(), Error> {
-    let mut pdf = Pdf::create("test.pdf")?;
-    
+pub fn create_pdf(word_search_list: Vec<TitledWordSearch>, width: f32, height: f32, directory: &str) -> Result<(), Error> {
+    let mut pdf = Pdf::create(&format!("{}/wordsearch.pdf", directory))?;
+
     set_max_count(word_search_list.len() as u32);
     set_count(0);
 
