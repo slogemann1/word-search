@@ -1257,6 +1257,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "imagine"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b66f20ef575a7087eed611a0d4ff4bd624d24bf9c63b4d614d2d8823090af75b"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3043,6 +3052,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "iced",
+ "imagine",
  "lazy_static 1.4.0",
  "pdf-canvas",
  "rand",

@@ -94,7 +94,7 @@ pub enum SearchError<> {
 #[derive(Deserialize)]
 struct WordResult {
     word: String,
-    score: Option<u64>,
+    _score: Option<u64>,
     tags: Vec<String>
 }
 

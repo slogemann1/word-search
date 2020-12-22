@@ -12,6 +12,7 @@ use iced::widget::{
     scrollable::{ self, Scrollable },
     button::{ self, Button }
 };
+use iced::window;
 use iced::time;
 use iced::executor;
 use iced;
@@ -20,6 +21,7 @@ use crate::word_list::SearchType;
 use crate::request::{ self, WordSearchRequest };
 use crate::config::{ self, Preferences };
 use crate::pdf;
+use crate::img;
 
 mod styling;
 use styling::Theme;
@@ -59,7 +61,13 @@ lazy_static! {
 }
 
 pub fn run() -> iced::Result {
+    let window_settings = window::Settings {
+        icon: img::get_icon(),
+        ..window::Settings::default()
+    };
+
     Gui::run(Settings {
+        window: window_settings,
         antialiasing: true,
         ..Settings::default()
     })?;

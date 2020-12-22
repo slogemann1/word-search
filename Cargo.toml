@@ -15,3 +15,4 @@ serde_json = "1.0.60"
 pdf-canvas = "0.6.0"
 iced = { version = "0.2.0", features = ["tokio"] }
 chrono = "0.4"
+imagine = "0.0.5"
