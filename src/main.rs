@@ -1,6 +1,7 @@
 extern crate rand;
 extern crate reqwest;
 extern crate serde;
+extern crate serde_json;
 extern crate pdf_canvas;
 extern crate iced;
 
@@ -12,10 +13,11 @@ mod word_list;
 mod request;
 mod pdf;
 mod gui;
+mod config;
 
 fn main() {
     match gui::run() {
         Ok(_) => (),
-        Err(err) => println!("{}", err)
+        Err(_) => ()
     };
 }
